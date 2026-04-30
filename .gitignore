@@ -1,0 +1,113 @@
+.scratch
+# =========================
+# General
+# =========================
+.DS_Store
+*.log
+*.tmp
+*.swp
+
+# =========================
+# Node / JS
+# =========================
+dist/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Cache / tooling
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.nyc_output
+coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# =========================
+# React Native / Metro
+# =========================
+.expo/
+.expo-shared/
+web-build/
+
+# Metro cache
+.metro-cache/
+
+# =========================
+# Android
+# =========================
+
+# Gradle + build output
+**/android/build/
+**/android/**/build/
+**/android/.gradle/
+**/android/**/.gradle/
+
+# Native build (VERY important)
+**/android/.cxx/
+**/android/**/.cxx/
+
+# Local config (machine-specific)
+**/android/local.properties
+**/android/local.properties.backup
+
+# SDK / signing
+**/*.keystore
+!**/debug.keystore
+
+# CMake / NDK junk
+**/android/**/*.bin
+**/android/**/*.json
+**/android/**/*.log
+
+# =========================
+# iOS
+# =========================
+**/ios/build/
+**/ios/Pods/
+**/ios/DerivedData/
+**/*.xcworkspace
+**/xcuserdata/
+
+# =========================
+# General build artifacts (catch-all)
+# =========================
+**/build/
+**/.cxx/
+**/.gradle/
+
+# Compiled binaries
+**/*.o
+**/*.so
+**/*.a
+**/*.obj
+**/*.bin
+
+# =========================
+# Editors / IDEs
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# Optional (uncomment if needed)
+# =========================
+
+# Android wrapper (usually KEEP these)
+# android/gradlew
+# android/gradlew.bat
+# android/gradle/wrapper/
+
+# iOS workspace (usually KEEP if using CocoaPods)
+# ios/*.xcworkspace

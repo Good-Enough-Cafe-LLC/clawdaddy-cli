@@ -1,0 +1,45 @@
+{
+  "name": "@clawdaddy/cli",
+  "version": "1.0.0",
+  "description": "Access your local LLM from anywhere with a secure P2P OpenAI-compatible API",
+  "type": "module",
+  "author": "Good Enough Cafe LLC <contact@goodenoughcafe.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/Good-Enough-Cafe-LLC/clawdaddy-cli",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Good-Enough-Cafe-LLC/clawdaddy-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Good-Enough-Cafe-LLC/clawdaddy-cli/issues"
+  },
+  "keywords": [
+    "llm",
+    "local-llm",
+    "ollama",
+    "webrtc",
+    "p2p",
+    "ai",
+    "local-ai",
+    "self-hosted",
+    "openai-compatible",
+    "private-ai",
+    "remote-access",
+    "tunneling"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx cli.ts"
+  },
+  "dependencies": {
+    "@koush/wrtc": "^0.5.3",
+    "commander": "^14.0.3",
+    "simple-peer": "^9.11.1",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}

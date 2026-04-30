@@ -1,0 +1,2388 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clawdaddy</title>
+  <!-- WebRTC libs — loaded always, used only when WebRTC mode is active -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #080b0f;
+      --bg2: #0d1117;
+      --bg3: #161b22;
+      --border: #21262d;
+      --red: #ef4444;
+      --red-dim: #7f1d1d;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --blue: #38bdf8;
+      --purple: #a78bfa;
+      --muted: #4b5563;
+      --text: #e2e8f0;
+      --text-dim: #6b7280;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      overflow: hidden;
+    }
+
+    /* ── Layout ── */
+    .shell {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 48px 1fr;
+      height: 100vh;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-logo {
+      color: var(--red);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+    }
+
+    .topbar-sep {
+      color: var(--border);
+    }
+
+    .topbar-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .status-dot.connecting {
+      background: var(--amber);
+      animation: blink 1s infinite;
+    }
+
+    .status-dot.error {
+      background: var(--red);
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1 }
+      50% { opacity: 0.3 }
+    }
+
+    .topbar-right {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .topbar-right span {
+      color: var(--blue);
+    }
+
+    .topbar-right.webrtc span {
+      color: var(--purple);
+    }
+
+    /* ── Connection mode toggle ── */
+    .mode-toggle {
+      display: flex;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .mode-toggle-btn {
+      padding: 4px 10px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      border: none;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .mode-toggle-btn.active {
+      background: var(--bg2);
+      color: var(--text);
+    }
+
+    .mode-toggle-btn.active.api-mode {
+      color: var(--blue);
+    }
+
+    .mode-toggle-btn.active.rtc-mode {
+      color: var(--purple);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-label {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* Pair form */
+    .pair-form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 3px;
+      letter-spacing: 0.05em;
+    }
+
+    .field-input {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 7px 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .field-input:focus {
+      border-color: var(--red);
+    }
+
+    .field-input::placeholder {
+      color: var(--muted);
+    }
+
+    /* WebRTC node ID input focus uses purple */
+    #nodeIdInput:focus {
+      border-color: var(--purple);
+    }
+
+    .btn {
+      padding: 8px 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: var(--red);
+      color: #fff;
+      width: 100%;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.88;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-purple {
+      background: var(--purple);
+      color: #0d0d1a;
+      width: 100%;
+      font-weight: 600;
+    }
+
+    .btn-purple:hover {
+      opacity: 0.88;
+    }
+
+    .btn-purple:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-ghost {
+      background: var(--bg3);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text);
+      border-color: var(--muted);
+    }
+
+    .btn-danger {
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid var(--red-dim);
+      width: 100%;
+    }
+
+    .btn-danger:hover {
+      background: var(--red);
+      color: #fff;
+    }
+
+    /* Host list */
+    .host-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .host-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .host-item:hover {
+      border-color: var(--muted);
+    }
+
+    .host-item.active {
+      border-color: var(--green);
+    }
+
+    .host-item .host-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .host-item.active .host-dot {
+      background: var(--green);
+      box-shadow: 0 0 4px var(--green);
+    }
+
+    .host-item .host-id {
+      flex: 1;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .host-item .host-status {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    /* Log panel */
+    .log-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .log-line {
+      font-size: 10px;
+      line-height: 1.6;
+      color: var(--text-dim);
+    }
+
+    .log-line.success { color: var(--green); }
+    .log-line.error { color: var(--red); }
+    .log-line.data { color: var(--amber); }
+    .log-line.api { color: var(--blue); }
+    .log-line.rtc { color: var(--purple); }
+
+    .log-ts {
+      color: var(--muted);
+      margin-right: 6px;
+    }
+
+    /* ── Main chat area ── */
+    .main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      scroll-behavior: smooth;
+    }
+
+    .messages::-webkit-scrollbar,
+    .log-panel::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .messages::-webkit-scrollbar-track,
+    .log-panel::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .messages::-webkit-scrollbar-thumb,
+    .log-panel::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px;
+    }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 800px;
+    }
+
+    .msg.user {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .msg.assistant {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    .msg-role {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .msg.user .msg-role { color: var(--red); }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.7;
+      font-family: var(--sans);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .msg.user .msg-bubble {
+      background: var(--red);
+      color: #fff;
+    }
+
+    .msg.assistant .msg-bubble {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .msg-stats {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    /* Streaming cursor */
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 14px;
+      background: var(--green);
+      margin-left: 2px;
+      vertical-align: middle;
+      animation: cursor-blink 0.7s infinite;
+    }
+
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1 }
+      50% { opacity: 0 }
+    }
+
+    /* Empty state */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--muted);
+    }
+
+    .empty-crab {
+      font-size: 48px;
+      opacity: 0.3;
+    }
+
+    .empty-text {
+      font-size: 16px;
+      letter-spacing: 0.08em;
+    }
+
+    .empty-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Input bar */
+    .input-bar {
+      padding: 16px 28px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      background: var(--bg2);
+    }
+
+    .chat-input {
+      flex: 1;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-family: var(--sans);
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      resize: none;
+      min-height: 42px;
+      max-height: 140px;
+      transition: border-color 0.2s;
+      line-height: 1.5;
+    }
+
+    .chat-input:focus { border-color: var(--red); }
+    .chat-input::placeholder { color: var(--muted); }
+    .chat-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .send-btn {
+      align-self: flex-end;
+      padding: 10px 18px;
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+
+    .send-btn:hover { opacity: 0.88; }
+    .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Settings */
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .settings-label {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .settings-value {
+      font-size: 11px;
+      color: var(--text);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 4px 8px;
+      width: 70px;
+      text-align: right;
+      font-family: var(--mono);
+    }
+
+    .settings-value:focus {
+      outline: none;
+      border-color: var(--red);
+    }
+
+    /* Personalities */
+    .host-item.mode-active {
+      border-color: var(--amber);
+      background: rgba(245, 158, 11, 0.05);
+    }
+
+    .host-item.mode-active .host-dot {
+      background: var(--amber);
+      box-shadow: 0 0 4px var(--amber);
+    }
+
+    .mode-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 6px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+
+    .mode-item.active {
+      border-color: var(--amber);
+      background: rgba(245, 158, 11, 0.04);
+    }
+
+    .mode-item.locked { opacity: 0.7; }
+
+    .mode-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .mode-row:hover { background: rgba(255, 255, 255, 0.02); }
+
+    .mode-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .mode-item.active .mode-dot {
+      background: var(--amber);
+      box-shadow: 0 0 4px var(--amber);
+    }
+
+    .mode-name {
+      flex: 1;
+      font-size: 11px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mode-lock {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .mode-actions {
+      display: flex;
+      border-top: 1px solid var(--border);
+    }
+
+    .mode-action-btn {
+      flex: 1;
+      padding: 5px 0;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      background: none;
+      border: none;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .mode-action-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .mode-action-btn.delete:hover { color: var(--red); }
+
+    .mode-action-btn + .mode-action-btn {
+      border-left: 1px solid var(--border);
+    }
+
+    /* Password field with show toggle */
+    .password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .field-input.password { padding-right: 32px; }
+
+    .eye-toggle {
+      position: absolute;
+      right: 8px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .eye-toggle:hover { color: var(--text); }
+
+    /* WebRTC commands panel */
+    .cmd-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .cmd-btn {
+      flex: 1;
+      padding: 6px 8px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .cmd-btn:hover {
+      border-color: var(--purple);
+      color: var(--text);
+    }
+
+    .cmd-custom {
+      display: flex;
+      gap: 6px;
+    }
+
+    .cmd-custom .field-input {
+      flex: 1;
+      font-size: 11px;
+      padding: 6px 8px;
+    }
+
+    .cmd-custom .btn {
+      padding: 6px 10px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    /* Section visibility helpers */
+    .api-only, .rtc-only { transition: opacity 0.15s; }
+  </style>
+  <base target="_blank">
+</head>
+
+<body>
+  <div class="shell">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <span class="topbar-logo">🦞 CLAWDADDY</span>
+      <span class="topbar-sep">/</span>
+      <div class="topbar-status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">checking...</span>
+      </div>
+
+      <!-- Connection mode toggle -->
+      <div class="mode-toggle" style="margin-left: 16px;">
+        <button class="mode-toggle-btn active api-mode" id="toggleApiBtn" onclick="window.setConnMode('api')">API</button>
+        <button class="mode-toggle-btn rtc-mode" id="toggleRtcBtn" onclick="window.setConnMode('rtc')">WebRTC</button>
+      </div>
+
+      <div class="topbar-right" id="topbarRight">
+        api <span id="topbarDetail">localhost:3001</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-left:auto;">
+        <button onclick="window.showHelp()" title="Help" style="background:none;border:1px solid var(--border);color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-dim)'">?</button>
+      </div>
+    </header>
+    <aside class="sidebar">
+
+      <!-- ── API MODE SECTIONS ── -->
+
+      <!-- API Base URL -->
+      <div class="sidebar-section api-only" id="sectionApiServer">
+        <div class="sidebar-label">API Server</div>
+        <div class="pair-form">
+          <input class="field-input" id="apiBaseInput" value="http://localhost:3001" spellcheck="false">
+        </div>
+      </div>
+
+      <!-- Connect Node -->
+      <div class="sidebar-section api-only" id="sectionPairHost">
+        <div class="sidebar-label">Connect Node</div>
+        <div class="pair-form">
+          <input class="field-input" id="hostIdInput" placeholder="Node ID (xxxx-xxxx)" spellcheck="false">
+          <input class="field-input" id="pairingCodeInput" placeholder="Pairing Code (XXXX-XXXX)" spellcheck="false"
+            type="password" autocomplete="off">
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <button class="btn btn-primary" id="pairBtn" style="flex: 1">Connect</button>
+            <button class="btn btn-danger" id="unpairBtn" style="display:none; flex: 1">Disconnect</button>
+          </div>
+          <div id="codeHint" style="font-size: 9px; color: var(--muted); margin-top: 6px; text-align: center;"></div>
+        </div>
+      </div>
+
+      <!-- API Commands -->
+      <div class="sidebar-section api-only" id="sectionApiCommands">
+        <div class="sidebar-label">Commands</div>
+        <div class="cmd-row">
+          <button class="cmd-btn" onclick="window.runApiCommand('ping')">ping</button>
+          <button class="cmd-btn" onclick="window.clearChat()">clear chat</button>
+        </div>
+        <div class="cmd-custom">
+          <input class="field-input" id="apiCmdInput" placeholder="command [payload]">
+          <button class="btn btn-ghost" onclick="window.runApiCustomCommand()">run</button>
+        </div>
+      </div>
+
+      <!-- ── WEBRTC MODE SECTIONS ── -->
+
+      <!-- Node Connect -->
+      <div class="sidebar-section rtc-only" id="sectionRtcConnect" style="display:none">
+        <div class="sidebar-label">WebRTC Direct</div>
+        <div class="pair-form">
+          <div>
+            <div class="field-label">Node ID</div>
+            <input class="field-input" id="nodeIdInput" placeholder="xxxx-xxxx (hex)" spellcheck="false">
+          </div>
+          <div>
+            <div class="field-label">Pairing Code</div>
+            <input class="field-input" id="rtcPairingCodeInput" placeholder="XXXX-XXXX" spellcheck="false"
+              type="password" autocomplete="off">
+          </div>
+          <button class="btn btn-purple" id="connectBtn" onclick="window.toggleConnect()">Connect</button>
+        </div>
+      </div>
+
+      <!-- WebRTC Commands -->
+      <div class="sidebar-section rtc-only" id="sectionRtcCommands" style="display:none">
+        <div class="sidebar-label">Commands</div>
+        <div class="cmd-row">
+          <button class="cmd-btn" onclick="window.runCommand('ping')">ping</button>
+          <button class="cmd-btn" onclick="window.clearChat()">clear chat</button>
+        </div>
+        <div class="cmd-custom">
+          <input class="field-input" id="cmdInput" placeholder="command [payload]">
+          <button class="btn btn-ghost" onclick="window.runCustomCommand()">run</button>
+        </div>
+      </div>
+
+      <!-- ── SHARED SECTIONS ── -->
+
+      <!-- Known Nodes (shared between modes) -->
+      <div class="sidebar-section" id="sectionPairedHosts">
+        <div class="sidebar-label">Known Nodes</div>
+        <div class="host-list" id="hostList">
+          <div style="font-size:11px;color:var(--muted)">No nodes yet</div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Settings</div>
+        <div class="settings-row">
+          <span class="settings-label">Max tokens</span>
+          <input class="settings-value" id="maxTokens" value="1024">
+        </div>
+        <div class="settings-row">
+          <span class="settings-label">Temperature</span>
+          <input class="settings-value" id="temperature" value="0.7" step="0.1" min="0" max="2">
+        </div>
+      </div>
+
+      <!-- Personalities (shared — shown in both API and WebRTC modes) -->
+      <div class="sidebar-section" id="sectionPersonalities">
+        <div class="sidebar-label">Personalities</div>
+        <div class="host-list" id="modeList"></div>
+        <div style="display:flex; gap:6px; margin-top:8px;">
+          <button class="btn btn-ghost" style="flex:1; font-size:11px;" onclick="window.showNewModePrompt()">+ New</button>
+          <button class="btn btn-ghost" style="font-size:11px; white-space:nowrap;" title="Pull modes from connected server" onclick="window.syncModesFromServer()">↓ Server</button>
+          <button class="btn btn-ghost" style="font-size:11px; white-space:nowrap;" title="Push local modes to connected server" onclick="window.pushModesToServer()">↑ Push</button>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="sidebar-label" style="padding: 12px 16px 4px; border-top: 1px solid var(--border)">Log</div>
+      <div class="log-panel" id="logPanel"></div>
+
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="messages" id="messages">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-crab">🦞</div>
+          <div class="empty-text" id="emptyText">connect to your API to start chatting</div>
+          <div id="emptyCmd" style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;max-width:320px;line-height:1.8;">
+            <div style="margin-bottom:8px;">chat normally, or prefix with <span style="color:var(--blue);font-family:var(--mono)">/cmd &lt;command&gt;</span> to send a raw command</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;"><br/>to start your own node:</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--blue);text-align:left;display:inline-block;line-height:2;">
+              <span style="color:var(--text-dim)">$</span> ollama pull llama3.2 <span style="color:#9ca3af"># or whatever model you want</span><br>
+              <span style="color:var(--text-dim)">$</span> npm install -g clawdaddy<br>
+              <span style="color:var(--text-dim)">$</span> clawdaddy serve start --model llama3.2
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <textarea class="chat-input" id="chatInput" placeholder="Message your node… or /cmd <payload> to send a raw command" rows="1" disabled
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    // ─── Clawdaddy Web Client — Unified (API + WebRTC) ───────────────────────────
+    // Connection mode is toggled via the topbar toggle.
+    // API mode: talks to a local initiator server (default: http://localhost:3001)
+    // WebRTC mode: direct P2P via Socket.IO switchboard + SimplePeer
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── Persistent Storage Helpers
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    const STORAGE_KEYS = {
+      KNOWN_NODES: 'clawdaddy_known_nodes',
+      REMOVED_NODES: 'clawdaddy_removed_nodes',
+      API_BASE: 'clawdaddy_api_base',
+      MAX_TOKENS: 'clawdaddy_max_tokens',
+      TEMPERATURE: 'clawdaddy_temperature',
+      PERSONALITIES: 'clawdaddy_personalities',
+      RTC_DISCONNECTED: 'clawdaddy_rtc_disconnected',
+      API_DISCONNECTED: 'clawdaddy_api_disconnected'
+    };
+
+    function loadKnownNodes() {
+      const stored = localStorage.getItem(STORAGE_KEYS.KNOWN_NODES);
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch(e) { return []; }
+      }
+      return [];
+    }
+
+    function loadRemovedNodes() {
+      const stored = localStorage.getItem(STORAGE_KEYS.REMOVED_NODES);
+      if (stored) {
+        try { return new Set(JSON.parse(stored)); }
+        catch(e) { return new Set(); }
+      }
+      return new Set();
+    }
+
+    function saveKnownNodes() {
+      localStorage.setItem(STORAGE_KEYS.KNOWN_NODES, JSON.stringify(knownNodes));
+    }
+
+    function saveRemovedNodes() {
+      localStorage.setItem(STORAGE_KEYS.REMOVED_NODES, JSON.stringify([...removedNodes]));
+    }
+
+    function addKnownNode(id) {
+      if (!id || removedNodes.has(id) || knownNodes.some(n => n.id === id)) return;
+      knownNodes.push({ id, addedAt: Date.now() });
+      saveKnownNodes();
+      renderNodeList();
+    }
+
+    function removeKnownNode(id) {
+      knownNodes = knownNodes.filter(n => n.id !== id);
+      removedNodes.add(id);
+      saveKnownNodes();
+      saveRemovedNodes();
+      if (activeHostId === id && isPaired) {
+        window.unpairHost();
+      }
+      if (connMode === 'rtc' && targetId === id && peer && !peer.destroyed) {
+        window.toggleConnect(); // Disconnect if currently connected
+      }
+      renderNodeList();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── Shared state
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    let connMode = 'api'; // 'api' | 'rtc'
+    let knownNodes = loadKnownNodes();
+    let removedNodes = loadRemovedNodes();
+
+    // ── Helpers ───────────────────────────────────────────────────────────────────
+
+    function uuid() {
+      return crypto.randomUUID();
+    }
+
+    function escHtml(s) {
+      if (!s) return '';
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ── Logging ───────────────────────────────────────────────────────────────────
+
+    function addLog(msg, type = 'info') {
+      const panel = document.getElementById('logPanel');
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const line = document.createElement('div');
+      line.className = `log-line ${type}`;
+      line.innerHTML = `<span class="log-ts">${ts}</span>${escHtml(msg)}`;
+      panel.appendChild(line);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    // ── Status ────────────────────────────────────────────────────────────────────
+
+    function setStatus(state, text) {
+      document.getElementById('statusDot').className = `status-dot ${state}`;
+      document.getElementById('statusText').textContent = text;
+    }
+
+    // ── Chat helpers ──────────────────────────────────────────────────────────────
+
+    function appendMessage(role, content) {
+      const messages = document.getElementById('messages');
+      const empty = document.getElementById('emptyState');
+      if (empty) empty.remove();
+
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.innerHTML = `
+        <div class="msg-role">${role === 'user' ? 'you' : '🦞 node'}</div>
+        <div class="msg-bubble" id="bubble-${Date.now()}">${content}</div>
+      `;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+      return div.querySelector('.msg-bubble');
+    }
+
+    function setChatEnabled(enabled) {
+      document.getElementById('chatInput').disabled = !enabled;
+      document.getElementById('sendBtn').disabled = !enabled;
+      const apiCmds = document.getElementById('sectionApiCommands');
+      if (apiCmds) apiCmds.style.display = (enabled && connMode === 'api') ? '' : 'none';
+    }
+
+    window.handleKey = function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    };
+
+    window.autoResize = function (el) {
+      el.style.height = '';
+      el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+    };
+
+    // ── Mode toggle (API vs WebRTC) ───────────────────────────────────────────────
+
+    window.setConnMode = function (mode) {
+      if (mode === connMode) return;
+
+      // Tear down whichever transport is active
+      if (connMode === 'api') {
+        stopApiMode();
+      } else {
+        stopRtcMode();
+      }
+
+      connMode = mode;
+
+      // Swap sidebar sections
+      const apiSections = document.querySelectorAll('.api-only');
+      const rtcSections = document.querySelectorAll('.rtc-only');
+
+      if (mode === 'api') {
+        apiSections.forEach(el => el.style.display = '');
+        rtcSections.forEach(el => el.style.display = 'none');
+
+        document.getElementById('toggleApiBtn').classList.add('active');
+        document.getElementById('toggleRtcBtn').classList.remove('active');
+
+        const tr = document.getElementById('topbarRight');
+        tr.className = 'topbar-right';
+        tr.innerHTML = 'api <span id="topbarDetail">' + getApiBase().replace('http://', '') + '</span>';
+
+        const emptyText = document.getElementById('emptyText');
+        const emptySub = document.getElementById('emptySub');
+        if (emptyText) emptyText.textContent = 'connect to an API to start chatting';
+        if (emptySub) emptySub.textContent = 'POST /v1/pair {nodeId}';
+
+        setStatus('', 'disconnected');
+        setChatEnabled(false);
+        addLog('Switched to API mode', 'info');
+      } else {
+        apiSections.forEach(el => el.style.display = 'none');
+        rtcSections.forEach(el => el.style.display = '');
+
+        document.getElementById('toggleRtcBtn').classList.add('active');
+        document.getElementById('toggleApiBtn').classList.remove('active');
+
+        const tr = document.getElementById('topbarRight');
+        tr.className = 'topbar-right webrtc';
+        tr.innerHTML = 'webrtc <span id="topbarDetail">direct p2p</span>';
+
+        const emptyText = document.getElementById('emptyText');
+        const emptySub = document.getElementById('emptySub');
+        if (emptyText) emptyText.textContent = 'connect to a node to start chatting';
+        if (emptySub) emptySub.textContent = 'WebRTC · end-to-end';
+
+        setStatus('', 'disconnected');
+        setChatEnabled(false);
+        addLog('Switched to WebRTC mode', 'rtc');
+      }
+      
+      renderNodeList(); // Re-render node list (shared between modes)
+    };
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── API MODE
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    let apiBase = localStorage.getItem(STORAGE_KEYS.API_BASE) || 'http://localhost:3001';
+    let isPaired = false;
+    let activeHostId = null;
+    let statusPollInterval = null;
+    let abortController = null;
+    let currentPairingCode = null;
+
+    function getApiBase() {
+      return document.getElementById('apiBaseInput').value.trim() || apiBase;
+    }
+
+    async function apiGet(path) {
+      const url = `${getApiBase()}${path}`;
+      addLog(`GET ${path}`, 'api');
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        return { ok: res.ok, status: res.status, data };
+      } catch (e) {
+        addLog(`Network error: ${e.message}`, 'error');
+        return { ok: false, status: 0, data: { error: e.message } };
+      }
+    }
+
+    async function apiPost(path, body) {
+      const url = `${getApiBase()}${path}`;
+      addLog(`POST ${path}`, 'api');
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        return { ok: res.ok, status: res.status, data };
+      } catch (e) {
+        addLog(`Network error: ${e.message}`, 'error');
+        return { ok: false, status: 0, data: { error: e.message } };
+      }
+    }
+
+    function stopApiMode() {
+      if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; }
+      if (abortController) { abortController.abort(); abortController = null; }
+      if (isPaired) setPairedState(false);
+    }
+
+    function setPairedState(paired, nodeId = null) {
+      isPaired = paired;
+      activeHostId = nodeId;
+
+      setChatEnabled(paired);
+      document.getElementById('pairBtn').style.display = paired ? 'none' : '';
+      document.getElementById('unpairBtn').style.display = paired ? '' : 'none';
+
+      if (!paired) {
+        document.getElementById('pairingCodeInput').value = '';
+        document.getElementById('codeHint').innerHTML = '';
+        currentPairingCode = null;
+      } else if (nodeId) {
+        document.getElementById('hostIdInput').value = nodeId;
+        if (currentPairingCode) {
+          const masked = currentPairingCode.slice(0, 4) + '-****';
+          document.getElementById('codeHint').innerHTML = `✓ Connected with code ${masked}`;
+          document.getElementById('codeHint').style.color = 'var(--green)';
+        }
+      }
+
+      const detail = document.getElementById('topbarDetail');
+      if (paired) {
+        setStatus('connected', `connected · ${nodeId}`);
+        if (detail) detail.textContent = nodeId;
+      } else {
+        setStatus('', 'disconnected');
+        if (detail) detail.textContent = getApiBase().replace('http://', '');
+      }
+    }
+
+    function setupCodeFieldToggle() {
+      const codeInput = document.getElementById('pairingCodeInput');
+      const container = document.createElement('div');
+      container.className = 'password-wrapper';
+      codeInput.parentNode.insertBefore(container, codeInput);
+      container.appendChild(codeInput);
+
+      const toggle = document.createElement('button');
+      toggle.className = 'eye-toggle';
+      toggle.innerHTML = '👁';
+      toggle.title = 'Show/hide pairing code';
+      toggle.type = 'button';
+      container.appendChild(toggle);
+
+      let visible = false;
+      toggle.onclick = () => {
+        visible = !visible;
+        codeInput.type = visible ? 'text' : 'password';
+        toggle.innerHTML = visible ? '👁‍🗨' : '👁';
+      };
+    }
+
+    async function pollStatus() {
+      if (connMode !== 'api') return;
+      if (localStorage.getItem(STORAGE_KEYS.API_DISCONNECTED)) return;
+      const result = await apiGet('/v1/status');
+      if (!result.ok) {
+        setStatus('error', 'api unreachable');
+        return;
+      }
+
+      const { connection, pairedHosts } = result.data;
+
+      // Merge server-known nodes into our local list
+      if (pairedHosts) pairedHosts.forEach(p => addKnownNode(p.id));
+
+      // Mark which nodes are currently online per server
+      const onlineIds = new Set((pairedHosts || []).filter(p => p.connected).map(p => p.id));
+      renderNodeList(onlineIds);
+
+      if (connection.status === 'connected' && connection.activeHostId) {
+        if (!isPaired || activeHostId !== connection.activeHostId) {
+          setPairedState(true, connection.activeHostId);
+          addLog(`Connected to ${connection.activeHostId}`, 'success');
+          addKnownNode(connection.activeHostId);
+        }
+      } else if (connection.status === 'connecting') {
+        setStatus('connecting', 'connecting...');
+      } else {
+        if (isPaired) {
+          setPairedState(false);
+          addLog('Disconnected from node', 'error');
+        }
+      }
+    }
+
+    // ── Known Nodes (persistent, shared between modes) ───────────────────────────
+
+    function renderNodeList(onlineIds = new Set()) {
+      const list = document.getElementById('hostList');
+      if (!knownNodes.length) {
+        list.innerHTML = '<div style="font-size:11px;color:var(--muted)">No nodes yet</div>';
+        return;
+      }
+      
+      // Get current connection info for both modes
+      const isApiConnected = connMode === 'api' && isPaired && activeHostId;
+      const isRtcConnected = connMode === 'rtc' && peer && !peer.destroyed && targetId;
+      const activeNodeId = isApiConnected ? activeHostId : (isRtcConnected ? targetId : null);
+      
+      list.innerHTML = knownNodes.map(n => {
+        const isActive = n.id === activeNodeId;
+        const isOnline = onlineIds.has(n.id);
+        const isConnectingRtc = connMode === 'rtc' && isConnecting && targetId === n.id;
+        return `
+          <div class="host-item ${isActive ? 'active' : ''}">
+            <div class="host-dot"></div>
+            <div class="host-id" onclick="window.selectNode('${n.id}')" style="cursor:pointer">${n.id}</div>
+            <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
+              ${isOnline ? '<span style="font-size:9px;color:var(--green)" title="Online">●</span>' : ''}
+              ${isConnectingRtc ? '<span style="font-size:9px;color:var(--amber)" title="Connecting">⟳</span>' : ''}
+              <button class="host-status" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;font-family:var(--mono);padding:0;" onclick="window.removeKnownNode('${n.id}')" title="Remove from history">🗑</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.removeKnownNode = removeKnownNode;
+    window.addKnownNode = addKnownNode;
+
+    window.selectNode = async function (nodeId) {
+      if (connMode === 'api') {
+        document.getElementById('hostIdInput').value = nodeId;
+        if (document.getElementById('pairingCodeInput').value.trim()) {
+          await window.pairHost();
+        } else {
+          addLog(`Enter pairing code for ${nodeId}`, 'info');
+        }
+      } else {
+        // WebRTC mode - fill the node ID and auto-connect if code is present
+        document.getElementById('nodeIdInput').value = nodeId;
+        const code = document.getElementById('rtcPairingCodeInput').value.trim();
+        if (code && !isConnecting && (!peer || peer.destroyed)) {
+          await window.toggleConnect();
+        } else if (!code) {
+          addLog(`Enter pairing code for ${nodeId}`, 'info');
+        }
+      }
+    };
+
+    function startPolling() {
+      if (statusPollInterval) clearInterval(statusPollInterval);
+      pollStatus();
+      statusPollInterval = setInterval(pollStatus, 3000);
+    }
+
+    window.pairHost = async function () {
+      const nodeId = document.getElementById('hostIdInput').value.trim();
+      const pairingCode = document.getElementById('pairingCodeInput').value.trim();
+
+      if (!nodeId) { addLog('Enter a node ID first', 'error'); return; }
+      if (!pairingCode) { addLog('Enter a pairing code first', 'error'); return; }
+
+      const nodeIdPattern = /^[0-9a-f]{4}-[0-9a-f]{4}$/i;
+      const codePattern = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i;
+
+      if (!nodeIdPattern.test(nodeId)) {
+        addLog('Invalid node ID format. Expected: xxxx-xxxx (hex)', 'error'); return;
+      }
+      if (!codePattern.test(pairingCode)) {
+        addLog('Invalid pairing code format. Expected: XXXX-XXXX', 'error'); return;
+      }
+
+      setStatus('connecting', 'connecting...');
+      addLog(`Connecting to ${nodeId} using code ${pairingCode.slice(0, 4)}-****`, 'info');
+      currentPairingCode = pairingCode;
+      localStorage.removeItem(STORAGE_KEYS.API_DISCONNECTED);
+
+      const result = await apiPost('/v1/pair', { hostId: nodeId, pairingCode });
+      if (result.ok && result.data.success) {
+        addLog(result.data.message, 'success');
+        addKnownNode(nodeId);
+        startPolling();
+      } else {
+        const err = result.data?.error || 'Connection failed';
+        addLog(err, 'error');
+        setStatus('error', 'connect failed');
+        currentPairingCode = null;
+      }
+    };
+
+    window.unpairHost = async function () {
+      addLog('Disconnecting...', 'info');
+      // Set flag first so pollStatus ignores any in-flight response showing connected
+      localStorage.setItem(STORAGE_KEYS.API_DISCONNECTED, '1');
+      if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; }
+      const result = await apiPost('/v1/unpair', {});
+      if (result.ok) {
+        addLog(result.data.message || 'Disconnected', 'success');
+        setPairedState(false);
+      } else {
+        addLog(result.data?.error || 'Unpair failed', 'error');
+        // Resume polling on failure
+        localStorage.removeItem(STORAGE_KEYS.API_DISCONNECTED);
+        startPolling();
+      }
+    };
+
+    // ── API chat (streaming SSE) ───────────────────────────────────────────────────
+
+    async function sendMessageApi(text) {
+      const maxTokens = parseInt(document.getElementById('maxTokens').value) || 1024;
+      const temperature = parseFloat(document.getElementById('temperature').value) || 0.7;
+      
+      localStorage.setItem(STORAGE_KEYS.MAX_TOKENS, maxTokens);
+      localStorage.setItem(STORAGE_KEYS.TEMPERATURE, temperature);
+
+      const bubble = appendMessage('assistant', '<span class="cursor"></span>');
+      let fullText = '';
+      let inputTokens = 0;
+      let outputTokens = 0;
+
+      if (abortController) abortController.abort();
+      abortController = new AbortController();
+
+      try {
+        const body = {
+          model: 'clawdaddy',
+          messages: [{ role: 'user', content: text }],
+          max_tokens: maxTokens,
+          temperature,
+          stream: true,
+        };
+        const sysprompt = getActiveSystemPrompt();
+        if (sysprompt) body.system = sysprompt;
+
+        const res = await fetch(`${getApiBase()}/v1/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: abortController.signal,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim() || line.startsWith('event:')) continue;
+            if (line.startsWith('data:')) {
+              const jsonStr = line.slice(5).trim();
+              if (jsonStr === '[DONE]') continue;
+              try {
+                const event = JSON.parse(jsonStr);
+                if (event.type === 'content_block_delta' && event.delta?.text) {
+                  fullText += event.delta.text;
+                  bubble.innerHTML = escHtml(fullText) + '<span class="cursor"></span>';
+                  document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+                }
+                if (event.type === 'message_start' && event.message?.usage?.input_tokens) {
+                  inputTokens = event.message.usage.input_tokens;
+                }
+                if (event.type === 'message_delta' && event.usage?.output_tokens) {
+                  outputTokens = event.usage.output_tokens;
+                }
+                if (event.type === 'error') throw new Error(event.error?.message || 'Stream error');
+              } catch (e) {
+                if (e.message === 'Stream error') throw e;
+              }
+            }
+          }
+        }
+
+        bubble.innerHTML = escHtml(fullText);
+        const statsEl = document.createElement('div');
+        statsEl.className = 'msg-stats';
+        statsEl.textContent = `${inputTokens} in · ${outputTokens} out tok`;
+        bubble.parentElement.appendChild(statsEl);
+        addLog(`Done: ${outputTokens} tokens`, 'success');
+
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          bubble.innerHTML = escHtml(fullText) + '<span style="color:var(--muted)"> [cancelled]</span>';
+          addLog('Stream cancelled', 'info');
+        } else {
+          bubble.innerHTML = `<span style="color:var(--red)">${escHtml(e.message)}</span>`;
+          addLog(`Error: ${e.message}`, 'error');
+        }
+      } finally {
+        abortController = null;
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── WEBRTC MODE (with proper chunking, duplicate protection, limited reconnect)
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    const SIGNAL_SERVER = 'https://clawdaddyswitch01.goodenoughcafe.com';
+
+    // ── Crypto helpers (Web Crypto API — mirrors initiator.ts) ───────────────────
+
+    function bufToHex(buf) {
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function hexToBuf(hex) {
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+      return bytes.buffer;
+    }
+
+    async function deriveSharedKey(pairingCode, hostId) {
+      const enc = new TextEncoder();
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw', enc.encode(pairingCode), 'PBKDF2', false, ['deriveBits']
+      );
+      const bits = await crypto.subtle.deriveBits(
+        { name: 'PBKDF2', salt: enc.encode(hostId), iterations: 100000, hash: 'SHA-256' },
+        keyMaterial, 256
+      );
+      return bufToHex(bits);
+    }
+
+    async function computeAuthHash(sharedKeyHex) {
+      const enc = new TextEncoder();
+      const digest = await crypto.subtle.digest('SHA-256', enc.encode(sharedKeyHex));
+      return bufToHex(digest);
+    }
+
+    async function computeHMAC(sharedKeyHex, payload) {
+      const data = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      const keyBuf = hexToBuf(sharedKeyHex);
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw', keyBuf, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      );
+      const sig = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(data));
+      return bufToHex(sig);
+    }
+
+    async function verifyHMAC(sharedKeyHex, payload, signature) {
+      const expected = await computeHMAC(sharedKeyHex, payload);
+      if (expected.length !== signature.length) return false;
+      let diff = 0;
+      for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+      return diff === 0;
+    }
+
+    // ── Chunked framing (matching server implementation) ─────────────────────────
+    
+    const CHUNK_SIZE = 12000;
+    const CHUNK_TIMEOUT_MS = 30000;
+    const MAX_TOTAL_CHUNKS = 1000;
+    const MAX_SERIALIZED_SIZE = 12000000;
+    
+    const incomingChunks = new Map(); // id -> { chunks, total, received, timeout }
+    
+    function reassembleChunk(frame, logFn) {
+      // Validate chunk count
+      if (frame.total > MAX_TOTAL_CHUNKS) {
+        if (logFn) logFn(`Rejected: too many chunks (${frame.total})`, 'error');
+        return null;
+      }
+      
+      // Validate estimated size
+      if (frame.total * CHUNK_SIZE > MAX_SERIALIZED_SIZE) {
+        if (logFn) logFn(`Rejected: estimated size too large`, 'error');
+        return null;
+      }
+      
+      // Validate indices
+      if (frame.index < 0 || frame.total <= 0 || frame.index >= frame.total) {
+        if (logFn) logFn(`Invalid chunk indices`, 'error');
+        return null;
+      }
+      
+      if (!incomingChunks.has(frame.id)) {
+        const timeout = setTimeout(() => {
+          const entry = incomingChunks.get(frame.id);
+          if (entry) {
+            addLog(`Chunk timeout for ${frame.id} (${entry.received}/${entry.total})`, 'error');
+            incomingChunks.delete(frame.id);
+          }
+        }, CHUNK_TIMEOUT_MS);
+        
+        incomingChunks.set(frame.id, {
+          chunks: new Array(frame.total),
+          total: frame.total,
+          received: 0,
+          timeout
+        });
+      }
+      
+      const entry = incomingChunks.get(frame.id);
+      
+      // Only count if not already received
+      if (entry.chunks[frame.index] === undefined) {
+        entry.chunks[frame.index] = frame.data;
+        entry.received++;
+      }
+      
+      if (entry.received < entry.total) return null;
+      
+      // All chunks received
+      clearTimeout(entry.timeout);
+      const serialised = entry.chunks.join('');
+      incomingChunks.delete(frame.id);
+      return serialised;
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────────────
+
+    let socket = null;
+    let peer = null;
+    let reconnectAttempt = 0;
+    let reconnectTimer = null;
+    let targetId = null;
+    let rtcPairingCode = null;
+    let currentSharedKey = null;
+    let currentAuthHash = null;
+    let isConnecting = false;
+    let isDestroyed = false;
+    let connectionTimeout = null;
+    const MAX_RECONNECT_ATTEMPTS = 3;
+    const pending = new Map(); // requestId → handlers
+    const WEB_DEVICE_ID = `web-${crypto.randomUUID().slice(0, 8)}`;
+
+    // ── Secure send ───────────────────────────────────────────────────────────────
+
+    async function sendSecure(payload) {
+      if (!peer || peer.destroyed || !currentSharedKey) {
+        throw new Error('No active P2P connection or missing shared key');
+      }
+      const signature = await computeHMAC(currentSharedKey, payload);
+      const serialised = JSON.stringify({ payload, signature });
+
+      const id = crypto.randomUUID();
+      const total = Math.ceil(serialised.length / CHUNK_SIZE);
+      for (let i = 0; i < total; i++) {
+        peer.send(JSON.stringify({
+          id, index: i, total,
+          data: serialised.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE),
+        }));
+      }
+    }
+
+    // ── Receive handler ──────────────────────────────────────────────────────────
+
+    async function handleRtcIncoming(raw) {
+      let frame;
+      try { frame = JSON.parse(raw); }
+      catch { addLog('Malformed frame', 'error'); return; }
+
+      if (typeof frame.id !== 'string' || typeof frame.index !== 'number' || typeof frame.total !== 'number') {
+        addLog('Unexpected frame shape', 'error');
+        return;
+      }
+
+      const serialised = reassembleChunk(frame, addLog);
+      if (serialised === null) return;
+
+      let envelope;
+      try { envelope = JSON.parse(serialised); }
+      catch { addLog('Malformed packet after reassembly', 'error'); return; }
+
+      if (!currentSharedKey || !(await verifyHMAC(currentSharedKey, envelope.payload, envelope.signature))) {
+        addLog('HMAC verification failed', 'error');
+        return;
+      }
+
+      const packet = envelope.payload;
+      const handler = pending.get(packet.requestId);
+      if (!handler) return;
+
+      switch (packet.type) {
+        case 'token': handler.onToken?.(packet.token); break;
+        case 'done': handler.onDone?.(packet.stats); break;
+        case 'error': handler.onError?.(packet.error); break;
+        case 'command_result': handler.onCommandResult?.(packet.result); break;
+        case 'command_error': handler.onError?.(packet.error); break;
+      }
+    }
+
+    // ── Lifecycle with limited reconnect ─────────────────────────────────────────
+
+    function stopRtcMode() {
+      isDestroyed = true;
+      localStorage.setItem(STORAGE_KEYS.RTC_DISCONNECTED, '1');
+      targetId = null;
+      rtcPairingCode = null;
+      rtcTeardown();
+      setChatEnabled(false);
+      document.getElementById('connectBtn').textContent = 'Connect';
+      document.getElementById('connectBtn').disabled = false;
+      isConnecting = false;
+      reconnectAttempt = 0;
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    }
+
+    function rtcTeardown() {
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (connectionTimeout) { clearTimeout(connectionTimeout); connectionTimeout = null; }
+      if (peer) { try { peer.destroy(); } catch(_) {} peer = null; }
+      if (socket) { try { socket.disconnect(); } catch(_) {} socket = null; }
+      currentSharedKey = null;
+      currentAuthHash = null;
+      
+      // Clean up pending requests
+      for (const [id, h] of pending) {
+        h.onError?.('Connection lost');
+        pending.delete(id);
+      }
+    }
+
+    function scheduleReconnect() {
+      if (isDestroyed || reconnectTimer || !targetId || !rtcPairingCode) return;
+      if (localStorage.getItem(STORAGE_KEYS.RTC_DISCONNECTED)) return;
+      
+      if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+        addLog(`Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Stopping.`, 'error');
+        setStatus('error', 'connection failed — max retries');
+        isConnecting = false;
+        document.getElementById('connectBtn').textContent = 'Connect';
+        document.getElementById('connectBtn').disabled = false;
+        return;
+      }
+      
+      reconnectAttempt++;
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 15000);
+      addLog(`Reconnect attempt ${reconnectAttempt}/${MAX_RECONNECT_ATTEMPTS} in ${Math.round(delay / 1000)}s...`, 'rtc');
+      setStatus('connecting', `reconnect ${reconnectAttempt}/${MAX_RECONNECT_ATTEMPTS}`);
+      
+      reconnectTimer = setTimeout(async () => {
+        reconnectTimer = null;
+        if (!isDestroyed && targetId && rtcPairingCode && (!peer || peer.destroyed)) {
+          await startRtcConnection(targetId, rtcPairingCode);
+        }
+      }, delay);
+    }
+
+    // ── Handshake ─────────────────────────────────────────────────────────────────
+
+    function startHandshake(sock, authHash) {
+      addLog(`Reaching for ${targetId}...`, 'rtc');
+      setStatus('connecting', 'handshaking...');
+
+      connectionTimeout = setTimeout(() => {
+        if (peer && !peer.connected) {
+          addLog('Connection timeout', 'error');
+          rtcTeardown();
+          scheduleReconnect();
+        }
+      }, 30000);
+
+      const p = new SimplePeer({
+        initiator: true,
+        trickle: true,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ],
+        },
+      });
+      peer = p;
+
+      sock.on('signal', ({ signalData }) => {
+        if (peer && !peer.destroyed) {
+          try { peer.signal(signalData); } catch (e) { addLog(`Signal error: ${e.message}`, 'error'); }
+        }
+      });
+
+      p.on('signal', data => { sock.emit('signal', { targetId, signalData: data, authHash }); });
+
+      p.on('connect', () => {
+        if (connectionTimeout) clearTimeout(connectionTimeout);
+        reconnectAttempt = 0;
+        isConnecting = false;
+        addLog('🔐 P2P tunnel established — PBKDF2+HMAC active', 'success');
+        setStatus('connected', `connected · ${targetId}`);
+        setChatEnabled(true);
+        document.getElementById('connectBtn').textContent = 'Disconnect';
+        document.getElementById('connectBtn').disabled = false;
+        const detail = document.getElementById('topbarDetail');
+        if (detail) detail.textContent = targetId;
+        addKnownNode(targetId);
+      });
+
+      p.on('data', data => handleRtcIncoming(data.toString()));
+
+      p.on('error', e => {
+        addLog(`Peer error: ${e.message}`, 'error');
+      });
+
+      p.on('close', () => {
+        addLog('P2P connection closed', 'error');
+        peer = null;
+        currentSharedKey = null;
+        currentAuthHash = null;
+        setStatus('error', 'disconnected');
+        setChatEnabled(false);
+        document.getElementById('connectBtn').textContent = 'Connect';
+        document.getElementById('connectBtn').disabled = false;
+        isConnecting = false;
+        
+        scheduleReconnect();
+      });
+    }
+
+    // ── Main connect ─────────────────────────────────────────────────────────────
+
+    async function startRtcConnection(nodeId, pairingCode) {
+      if (isConnecting) {
+        addLog('Already connecting...', 'warn');
+        return;
+      }
+      
+      rtcTeardown();
+      if (isDestroyed || !nodeId || !pairingCode) return;
+
+      isConnecting = true;
+      addLog('🔑 Deriving shared key (PBKDF2)...', 'rtc');
+      setStatus('connecting', 'deriving key...');
+
+      try {
+        currentSharedKey = await deriveSharedKey(pairingCode, nodeId);
+        currentAuthHash = await computeAuthHash(currentSharedKey);
+        addLog(`🔐 Auth hash: ${currentAuthHash.slice(0, 12)}...`, 'rtc');
+      } catch (e) {
+        addLog(`Key derivation failed: ${e.message}`, 'error');
+        isConnecting = false;
+        return;
+      }
+
+      addLog('Connecting to switchboard...', 'rtc');
+      setStatus('connecting', 'connecting...');
+
+      const sock = io(SIGNAL_SERVER, { transports: ['websocket'], reconnection: false });
+      socket = sock;
+      const authHash = currentAuthHash;
+
+      sock.on('connect', () => {
+        addLog('Connected to switchboard', 'success');
+        sock.emit('register', { deviceId: WEB_DEVICE_ID, authHash });
+        startHandshake(sock, authHash);
+      });
+
+      sock.on('disconnect', reason => {
+        addLog(`Switchboard disconnected: ${reason}`, 'error');
+        if (!peer) scheduleReconnect();
+      });
+
+      sock.on('connect_error', e => {
+        addLog(`Switchboard error: ${e.message}`, 'error');
+        rtcTeardown();
+        scheduleReconnect();
+      });
+    }
+
+    // ── UI connect/disconnect toggle ──────────────────────────────────────────────
+
+    window.toggleConnect = async function () {
+      if ((peer && !peer.destroyed) || isConnecting) {
+        // Disconnect — set isDestroyed and persist so page reload doesn't reconnect
+        isDestroyed = true;
+        localStorage.setItem(STORAGE_KEYS.RTC_DISCONNECTED, '1');
+        targetId = null;
+        rtcPairingCode = null;
+        rtcTeardown();
+        // isDestroyed stays true to prevent the async peer 'close' event from triggering scheduleReconnect
+        isConnecting = false;
+        reconnectAttempt = 0;
+        setStatus('', 'disconnected');
+        document.getElementById('connectBtn').textContent = 'Connect';
+        document.getElementById('connectBtn').disabled = false;
+        setChatEnabled(false);
+        const detail = document.getElementById('topbarDetail');
+        if (detail) detail.textContent = 'direct p2p';
+        addLog('Disconnected.', 'rtc');
+        renderNodeList();
+        return;
+      }
+
+      const nodeInput = document.getElementById('nodeIdInput').value.trim().toUpperCase();
+      const codeInput = document.getElementById('rtcPairingCodeInput').value.trim().toUpperCase()
+        .replace(/\s+/g, '').replace(/^(.{4})(.{4})$/, '$1-$2');
+
+      if (!nodeInput) { addLog('Enter a node ID first.', 'error'); return; }
+      if (!codeInput) { addLog('Enter a pairing code first.', 'error'); return; }
+
+      if (!/^[0-9A-F]{4}-[0-9A-F]{4}$/i.test(nodeInput)) {
+        addLog('Invalid node ID format. Expected: xxxx-xxxx (hex)', 'error'); return;
+      }
+      if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(codeInput)) {
+        addLog('Invalid pairing code format. Expected: XXXX-XXXX', 'error'); return;
+      }
+
+      targetId = nodeInput;
+      rtcPairingCode = codeInput;
+      isDestroyed = false;
+      localStorage.removeItem(STORAGE_KEYS.RTC_DISCONNECTED);
+      reconnectAttempt = 0;
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+
+      addLog(`Targeting node: ${targetId}`, 'rtc');
+      addLog(`Pairing code: ${codeInput.slice(0, 4)}-****`, 'rtc');
+
+      document.getElementById('connectBtn').textContent = 'Connecting...';
+      document.getElementById('connectBtn').disabled = true;
+
+      await startRtcConnection(targetId, rtcPairingCode);
+      
+      // Re-enable button if connection fails quickly
+      setTimeout(() => {
+        if (document.getElementById('connectBtn').textContent === 'Connecting...') {
+          document.getElementById('connectBtn').textContent = 'Connect';
+          document.getElementById('connectBtn').disabled = false;
+        }
+      }, 5000);
+    };
+
+    // ── WebRTC chat ───────────────────────────────────────────────────────────────
+
+    async function sendMessageRtc(text) {
+      if (!peer || peer.destroyed || !currentSharedKey) { addLog('Not connected.', 'error'); return; }
+
+      const maxTokens = parseInt(document.getElementById('maxTokens').value) || 1024;
+      const temperature = parseFloat(document.getElementById('temperature').value) || 0.7;
+      
+      localStorage.setItem(STORAGE_KEYS.MAX_TOKENS, maxTokens);
+      localStorage.setItem(STORAGE_KEYS.TEMPERATURE, temperature);
+
+      const requestId = uuid();
+      const bubble = appendMessage('assistant', '<span class="cursor"></span>');
+      let fullText = '';
+
+      pending.set(requestId, {
+        onToken: (token) => {
+          fullText += token;
+          bubble.innerHTML = escHtml(fullText) + '<span class="cursor"></span>';
+          document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        },
+        onDone: (stats) => {
+          bubble.innerHTML = escHtml(fullText);
+          const statsEl = document.createElement('div');
+          statsEl.className = 'msg-stats';
+          statsEl.textContent = `${stats.tokens} tok · ${stats.tps?.toFixed(1)} tok/s · ${stats.ms}ms`;
+          bubble.parentElement.appendChild(statsEl);
+          pending.delete(requestId);
+          addLog(`Done: ${stats.tokens} tokens @ ${stats.tps?.toFixed(1)} tok/s`, 'success');
+        },
+        onError: (err) => {
+          bubble.innerHTML = `<span style="color:var(--red)">${escHtml(err)}</span>`;
+          pending.delete(requestId);
+          addLog(`Error: ${err}`, 'error');
+        },
+      });
+
+      const rtcPayload = {
+        type: 'inference',
+        requestId,
+        messages: [{ role: 'user', content: text }],
+        options: { temperature, max_tokens: maxTokens, stream: true },
+      };
+      const sysprompt = getActiveSystemPrompt();
+      if (sysprompt) rtcPayload.system = sysprompt;
+
+      await sendSecure(rtcPayload);
+    }
+
+    window.runCommand = async function (name, payload) {
+      if (!peer || peer.destroyed || !currentSharedKey) { addLog('Not connected.', 'error'); return; }
+
+      const requestId = uuid();
+      addLog(`→ command: ${name}${payload !== undefined ? ' ' + JSON.stringify(payload) : ''}`, 'data');
+
+      pending.set(requestId, {
+        onCommandResult: (result) => {
+          addLog(`← ${JSON.stringify(result)}`, 'success');
+          pending.delete(requestId);
+        },
+        onError: (err) => {
+          addLog(`← error: ${err}`, 'error');
+          pending.delete(requestId);
+        },
+      });
+
+      setTimeout(() => {
+        if (pending.has(requestId)) pending.get(requestId)?.onError('Timed out');
+      }, 10000);
+
+      await sendSecure({ type: 'command', requestId, command: name, payload });
+    };
+
+    window.runCustomCommand = function () {
+      const raw = document.getElementById('cmdInput').value.trim();
+      if (!raw) return;
+      const spaceIdx = raw.indexOf(' ');
+      const name = spaceIdx === -1 ? raw : raw.slice(0, spaceIdx);
+      const rest = spaceIdx === -1 ? undefined : raw.slice(spaceIdx + 1).trim();
+      let payload = rest;
+      if (rest) { try { payload = JSON.parse(rest); } catch (_) { } }
+      window.runCommand(name, payload);
+    };
+
+    // ── API command helpers (mirror of WebRTC runCommand for API mode) ────────────
+
+    window.runApiCommand = async function (name, payload) {
+      if (!isPaired) { addLog('Not connected.', 'error'); return; }
+      addLog(`→ command: ${name}${payload !== undefined ? ' ' + JSON.stringify(payload) : ''}`, 'data');
+      const result = await apiPost('/v1/command', { command: name, payload });
+      if (result.ok) {
+        addLog(`← ${JSON.stringify(result.data)}`, 'success');
+      } else {
+        addLog(`← error: ${result.data?.error || 'unknown'}`, 'error');
+      }
+    };
+
+    window.runApiCustomCommand = function () {
+      const raw = document.getElementById('apiCmdInput').value.trim();
+      if (!raw) return;
+      const spaceIdx = raw.indexOf(' ');
+      const name = spaceIdx === -1 ? raw : raw.slice(0, spaceIdx);
+      const rest = spaceIdx === -1 ? undefined : raw.slice(spaceIdx + 1).trim();
+      let payload = rest;
+      if (rest) { try { payload = JSON.parse(rest); } catch (_) { } }
+      window.runApiCommand(name, payload);
+    };
+
+    // ── Clear chat ────────────────────────────────────────────────────────────────
+
+    window.clearChat = function () {
+      const messages = document.getElementById('messages');
+      // Remove all message bubbles but restore empty state if it was removed
+      const children = Array.from(messages.children);
+      for (const child of children) {
+        if (!child.classList.contains('empty-state')) child.remove();
+      }
+      if (!document.getElementById('emptyState')) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.id = 'emptyState';
+        empty.innerHTML = `
+          <div class="empty-crab">🦞</div>
+          <div class="empty-text" id="emptyText">connect to your API to start chatting</div>
+          <div id="emptyCmd" style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;max-width:320px;line-height:1.8;">
+            <div style="margin-bottom:8px;">chat normally, or prefix with <span style="color:var(--blue);font-family:var(--mono)">/cmd &lt;command&gt;</span> to send a raw command</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;"><br/>to start your own node:</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--blue);text-align:left;display:inline-block;line-height:2;">
+              <span style="color:var(--text-dim)">$</span> ollama pull llama3.2 <span style="color:#9ca3af"># or whatever model you want</span><br>
+              <span style="color:var(--text-dim)">$</span> npm install -g clawdaddy<br>
+              <span style="color:var(--text-dim)">$</span> clawdaddy serve start --model llama3.2
+            </div>
+          </div>
+        `;
+        messages.appendChild(empty);
+      }
+      addLog('Chat cleared.', 'info');
+    };
+
+    // ── Help modal ────────────────────────────────────────────────────────────────
+
+    window.showHelp = function () {
+      const existing = document.getElementById('helpModal');
+      if (existing) { existing.remove(); return; }
+
+      const modal = document.createElement('div');
+      modal.id = 'helpModal';
+      modal.style.cssText = `
+        position:fixed; top:60px; right:16px; width:340px; z-index:100;
+        background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+        padding:16px; font-family:var(--mono); font-size:11px; color:var(--text);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      `;
+      modal.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span style="font-weight:600;color:var(--blue)">🦞 Help</span>
+          <button onclick="document.getElementById('helpModal').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;">✕</button>
+        </div>
+
+        <div style="color:var(--text-dim);margin-bottom:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Connecting</div>
+        <div style="line-height:1.9;color:#9ca3af;margin-bottom:12px;font-size:11px;">
+          <span style="color:var(--blue)">WebRTC tab</span> — connect directly from this browser, no install needed. Enter your node ID and pairing code.<br>
+          <span style="color:var(--blue)">API tab</span> — run a local API bridge, then point this page at it:
+          <div style="color:var(--blue);line-height:2;margin-top:4px;margin-left:8px;">
+            <span style="color:var(--muted)">$</span> npm install -g clawdaddy<br>
+            <span style="color:var(--muted)">$</span> clawdaddy cli api &lt;nodeId&gt; &lt;pairingCode&gt;
+          </div>
+          <span style="color:#9ca3af;font-size:10px;">then set API Server to the URL it prints (default http://localhost:3001)</span>
+        </div>
+
+        <div style="color:var(--text-dim);margin-bottom:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Start a node</div>
+        <div style="color:var(--blue);line-height:2;margin-bottom:12px;">
+          <span style="color:var(--muted)">$</span> ollama pull llama3.2<br>
+          <span style="color:var(--muted)">$</span> npm install -g clawdaddy<br>
+          <span style="color:var(--muted)">$</span> clawdaddy serve start --model llama3.2
+        </div>
+
+        <div style="color:var(--text-dim);margin-bottom:8px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Available commands</div>
+        <div style="line-height:2;color:#9ca3af;">
+          <span style="color:var(--blue)">/ping</span> — check the node is alive<br>
+          <span style="color:var(--blue)">/get_status</span> — model, memory, connections<br>
+          <span style="color:var(--blue)">/get_memory_stats</span> — conversation memory usage<br>
+          <span style="color:var(--blue)">/clear_memory</span> — wipe conversation history<br>
+          <span style="color:var(--blue)">/set_system_prompt</span> &lt;text&gt; — swap personality<br>
+          <span style="color:var(--blue)">/echo</span> &lt;message&gt; — sanity check the tunnel<br>
+          <span style="color:var(--blue)">/log</span> &lt;message&gt; — write to server log file<br>
+          <span style="color:var(--blue)">/cmd</span> &lt;command&gt; — send any custom command
+        </div>
+
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);color:#9ca3af;font-size:10px;">
+          log commands are written to <span style="color:var(--blue)">~/.clawdaddy/serve.log</span> — hook your agents and workflows in there.
+        </div>
+
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);color:#9ca3af;font-size:10px;line-height:1.7;">
+          Clawdaddy is a "Good Enough" project, but we're happy to make it better. If you find a bug or have an idea for a new command, feel free to open an issue or a PR on <a href="https://github.com/Good-Enough-Cafe-LLC/clawdaddy-cli/issues" target="_blank" style="color:var(--blue)">GitHub</a>.
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      // Close on outside click
+      setTimeout(() => {
+        document.addEventListener('click', function handler(e) {
+          if (!modal.contains(e.target) && e.target.getAttribute('onclick') !== 'window.showHelp()') {
+            modal.remove();
+            document.removeEventListener('click', handler);
+          }
+        });
+      }, 50);
+    };
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── Unified sendMessage (routes to active transport)
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    window.sendMessage = async function () {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      if (connMode === 'api' && !isPaired) return;
+      if (connMode === 'rtc' && (!peer || peer.destroyed)) return;
+
+      input.value = '';
+      input.style.height = '';
+      appendMessage('user', escHtml(text));
+
+      if (connMode === 'api') {
+        await sendMessageApi(text);
+      } else {
+        await sendMessageRtc(text);
+      }
+    };
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── Personality Management (client-local session storage)
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    const DEFAULT_MODES = [
+      {
+        id: 'chat_buddy',
+        name: 'Chat Buddy',
+        icon: '🦞',
+        systemPrompt: 'You are a helpful, friendly assistant. Be concise and conversational.',
+        locked: true,
+      }
+    ];
+
+    function loadPersonalities() {
+      const stored = localStorage.getItem(STORAGE_KEYS.PERSONALITIES);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          // Merge with defaults (defaults always present)
+          const merged = [...DEFAULT_MODES];
+          for (const p of parsed) {
+            if (!merged.some(m => m.id === p.id)) {
+              merged.push(p);
+            }
+          }
+          return merged;
+        } catch(e) {}
+      }
+      return JSON.parse(JSON.stringify(DEFAULT_MODES));
+    }
+
+    function savePersonalities(modes) {
+      const toSave = modes.filter(m => !m.locked);
+      localStorage.setItem(STORAGE_KEYS.PERSONALITIES, JSON.stringify(toSave));
+    }
+
+    let availableModes = loadPersonalities();
+    let activeModeId = 'chat_buddy';
+
+    function getActiveSystemPrompt() {
+      const mode = availableModes.find(m => m.id === activeModeId);
+      return mode?.systemPrompt || null;
+    }
+
+    window.renderModeList = function () {
+      const list = document.getElementById('modeList');
+      if (!availableModes.length) {
+        list.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--text-dim)">No modes.</div>';
+        return;
+      }
+      list.innerHTML = availableModes.map(m => {
+        const isActive = m.id === activeModeId;
+        const isLocked = !!m.locked;
+        return `
+          <div class="mode-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}">
+            <div class="mode-row" onclick="window.selectMode('${m.id}')">
+              <div class="mode-dot"></div>
+              <div class="mode-name">${m.icon || '🤖'} ${escHtml(m.name)}</div>
+              ${isLocked ? '<span class="mode-lock">🔒</span>' : ''}
+            </div>
+            ${!isLocked ? `
+              <div class="mode-actions">
+                <button class="mode-action-btn" onclick="event.stopPropagation(); window.editMode('${m.id}')">edit</button>
+                <button class="mode-action-btn delete" onclick="event.stopPropagation(); window.deleteMode('${m.id}')">delete</button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    };
+
+    window.selectMode = function (id) {
+      const mode = availableModes.find(m => m.id === id);
+      if (!mode) return;
+      activeModeId = id;
+      addLog(`Mode → ${mode.name}`, 'info');
+      window.renderModeList();
+
+      if (connMode === 'api' && isPaired) {
+        apiPost('/v1/command', { command: 'set_active_mode', payload: id })
+          .catch(() => {});
+      } else if (connMode === 'rtc' && peer && !peer.destroyed && currentSharedKey) {
+        sendSecure({ type: 'command', requestId: uuid(), command: 'set_active_mode', payload: id })
+          .catch(() => {});
+      }
+    };
+
+    window.showNewModePrompt = function () {
+      const name = prompt('Mode Name:');
+      if (!name) return;
+      const promptText = prompt('System Instructions:');
+      if (!promptText) return;
+      const newMode = {
+        id: name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
+        name,
+        systemPrompt: promptText,
+        icon: '✨',
+        locked: false,
+      };
+      availableModes.push(newMode);
+      savePersonalities(availableModes);
+      addLog(`Created mode: ${name}`, 'success');
+      window.renderModeList();
+    };
+
+    window.editMode = function (id) {
+      const mode = availableModes.find(m => m.id === id);
+      if (!mode || mode.locked) return;
+      const name = prompt('Mode name:', mode.name);
+      if (!name) return;
+      const promptText = prompt('System instructions:', mode.systemPrompt);
+      if (promptText === null) return;
+      mode.name = name;
+      mode.systemPrompt = promptText;
+      savePersonalities(availableModes);
+      addLog(`Updated mode: ${name}`, 'success');
+      window.renderModeList();
+    };
+
+    window.deleteMode = function (id) {
+      const mode = availableModes.find(m => m.id === id);
+      if (!mode || mode.locked) return;
+      if (!confirm(`Delete "${mode.name}"?`)) return;
+      availableModes = availableModes.filter(m => m.id !== id);
+      if (activeModeId === id) activeModeId = 'chat_buddy';
+      savePersonalities(availableModes);
+      addLog(`Deleted mode: ${mode.name}`, 'success');
+      window.renderModeList();
+    };
+
+    window.syncModesFromServer = async function () {
+      const isApi = connMode === 'api' && isPaired;
+      const isRtc = connMode === 'rtc' && peer && !peer.destroyed && currentSharedKey;
+      if (!isApi && !isRtc) { addLog('Not connected — cannot sync from server', 'error'); return; }
+
+      addLog('Fetching modes from server...', isApi ? 'api' : 'rtc');
+      let serverModes = null;
+
+      if (isApi) {
+        const response = await apiPost('/v1/command', { command: 'get_modes', payload: {} });
+        if (response.ok && Array.isArray(response.data?.result)) serverModes = response.data.result;
+      } else {
+        serverModes = await new Promise((resolve) => {
+          const requestId = uuid();
+          pending.set(requestId, {
+            onCommandResult: (r) => { pending.delete(requestId); resolve(Array.isArray(r) ? r : null); },
+            onError: () => { pending.delete(requestId); resolve(null); },
+          });
+          setTimeout(() => { if (pending.has(requestId)) { pending.delete(requestId); resolve(null); } }, 8000);
+          sendSecure({ type: 'command', requestId, command: 'get_modes', payload: {} }).catch(() => resolve(null));
+        });
+      }
+
+      if (!serverModes) { addLog('Could not fetch modes from server', 'error'); return; }
+
+      let added = 0;
+      serverModes.forEach(sm => {
+        if (!availableModes.some(m => m.id === sm.id)) {
+          availableModes.push({ ...sm, locked: false });
+          added++;
+        }
+      });
+      savePersonalities(availableModes);
+      addLog(`Synced from server: ${added} new mode(s) added`, 'success');
+      window.renderModeList();
+    };
+
+    window.pushModesToServer = async function () {
+      const isApi = connMode === 'api' && isPaired;
+      const isRtc = connMode === 'rtc' && peer && !peer.destroyed && currentSharedKey;
+      if (!isApi && !isRtc) { addLog('Not connected — cannot push to server', 'error'); return; }
+
+      const toPush = availableModes.filter(m => !m.locked);
+      if (!toPush.length) { addLog('No custom modes to push', 'info'); return; }
+
+      addLog(`Pushing ${toPush.length} mode(s) to server...`, isApi ? 'api' : 'rtc');
+      let ok = 0;
+
+      for (const m of toPush) {
+        if (isApi) {
+          const r = await apiPost('/v1/command', { command: 'upsert_mode', payload: m });
+          if (r.ok) ok++;
+        } else {
+          await sendSecure({ type: 'command', requestId: uuid(), command: 'upsert_mode', payload: m })
+            .then(() => ok++).catch(() => {});
+        }
+      }
+      addLog(`Pushed ${ok}/${toPush.length} modes to server`, ok === toPush.length ? 'success' : 'error');
+    };
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── Event Listeners & Init
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    document.getElementById('apiBaseInput').addEventListener('change', () => {
+      apiBase = getApiBase();
+      localStorage.setItem(STORAGE_KEYS.API_BASE, apiBase);
+      const detail = document.getElementById('topbarDetail');
+      if (detail && connMode === 'api') detail.textContent = apiBase.replace('http://', '');
+      addLog(`API base changed to ${apiBase}`, 'info');
+      if (isPaired) pollStatus();
+    });
+
+    document.getElementById('hostIdInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') window.pairHost();
+    });
+
+    document.getElementById('pairingCodeInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') window.pairHost();
+    });
+
+    document.getElementById('pairBtn').addEventListener('click', () => window.pairHost());
+    document.getElementById('unpairBtn').addEventListener('click', () => window.unpairHost());
+
+    document.getElementById('nodeIdInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') window.toggleConnect();
+    });
+
+    document.getElementById('rtcPairingCodeInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') window.toggleConnect();
+    });
+
+    document.getElementById('cmdInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') window.runCustomCommand();
+    });
+
+    // Load saved settings
+    const savedMaxTokens = localStorage.getItem(STORAGE_KEYS.MAX_TOKENS);
+    const savedTemp = localStorage.getItem(STORAGE_KEYS.TEMPERATURE);
+    if (savedMaxTokens) document.getElementById('maxTokens').value = savedMaxTokens;
+    if (savedTemp) document.getElementById('temperature').value = savedTemp;
+    
+    const savedApiBase = localStorage.getItem(STORAGE_KEYS.API_BASE);
+    if (savedApiBase) document.getElementById('apiBaseInput').value = savedApiBase;
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ── Init
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    setupCodeFieldToggle();
+    window.renderModeList();
+    addLog('Clawdaddy web client ready', 'info');
+    addLog(`Mode: API → ${apiBase}`, 'info');
+    renderNodeList();
+
+  </script>
+</body>
+
+</html>
